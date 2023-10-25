@@ -132,6 +132,7 @@ class BridgeDataset:
         data_paths: List[Union[str, List[str]]],
         seed: int,
         action_proprio_metadata: Optional[dict] = None,
+        cache_file_name: Optional[str] = None,
         normalization_type: Optional[str] = "normal",
         relabel_actions: bool = True,
         goal_relabeling_strategy: str = "uniform",
@@ -165,6 +166,7 @@ class BridgeDataset:
         self.goal_relabeling_strategy = goal_relabeling_strategy
         self.goal_relabeling_kwargs = goal_relabeling_kwargs
         self.cache = cache
+        self.cache_file_name = cache_file_name
         self.augment_kwargs = augment_kwargs
         self.augment_next_obs_goal_differently = augment_next_obs_goal_differently
         self.act_pred_horizon = act_pred_horizon
@@ -244,7 +246,10 @@ class BridgeDataset:
 
         # cache before add_goals because add_goals introduces randomness
         if self.cache:
-            dataset = dataset.cache()
+            if self.cache_file_name is not None:
+                dataset = dataset.cache(self.cache_file_name)
+            else:
+                dataset = dataset.cache()
 
         # yields trajectories
         dataset = dataset.map(self._add_goals, num_parallel_calls=tf.data.AUTOTUNE)
