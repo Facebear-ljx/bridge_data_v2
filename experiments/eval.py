@@ -64,13 +64,16 @@ NO_PITCH_ROLL = False
 NO_YAW = False
 STICKY_GRIPPER_NUM_STEPS = 1
 WORKSPACE_BOUNDS = [[0.1, -0.15, -0.01, -1.57, 0], [0.45, 0.25, 0.25, 1.57, 0]]
-CAMERA_TOPICS = [{"name": "/blue/image_raw"}]
+CAMERA_TOPICS = [{"name": "/wrist/image_raw"},
+                  {"name": "/yellow/image_raw"},
+                  {"name": "/blue/image_raw"}]
 FIXED_STD = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 ##############################################################################
 
 
 def load_checkpoint(checkpoint_weights_path, checkpoint_config_path):
+    print("Start loading chekpoint!")
     with open(checkpoint_config_path, "r") as f:
         config = json.load(f)
 
@@ -106,6 +109,7 @@ def load_checkpoint(checkpoint_weights_path, checkpoint_config_path):
     # create agent from wandb config
     rng = jax.random.PRNGKey(0)
     rng, construct_rng = jax.random.split(rng)
+    print("Start agent creat!")
     agent = agents[config["agent"]].create(
         rng=construct_rng,
         observations=example_obs,
@@ -114,15 +118,17 @@ def load_checkpoint(checkpoint_weights_path, checkpoint_config_path):
         encoder_def=encoder_def,
         **config["agent_kwargs"],
     )
-
+    print("Finish agent creat!")
     # load action metadata from wandb
     action_proprio_metadata = config["bridgedata_config"]["action_proprio_metadata"]
     action_mean = np.array(action_proprio_metadata["action"]["mean"])
     action_std = np.array(action_proprio_metadata["action"]["std"])
 
     # hydrate agent with parameters from checkpoint
+    print("Start agent checkpoint restore!")
     agent = checkpoints.restore_checkpoint(checkpoint_weights_path, agent)
-
+    print("Finish agent checkpoint restore!")
+    
     def get_action(obs, goal_obs):
         nonlocal rng
         rng, key = jax.random.split(rng)
@@ -137,7 +143,7 @@ def load_checkpoint(checkpoint_weights_path, checkpoint_config_path):
         text_processor = text_processors[config["text_processor"]](
             **config["text_processor_kwargs"]
         )
-
+    print("Finish loading chekpoint!")
     return get_action, obs_horizon, text_processor
 
 
@@ -252,6 +258,7 @@ def main(_):
 
         # show img for monitoring
         if FLAGS.show_image:
+            print("Show image")
             obs = widowx_client.get_observation()
             while obs is None:
                 print("Waiting for observations...")
@@ -308,16 +315,28 @@ def main(_):
 
                     if FLAGS.show_image:
                         bgr_img = cv2.cvtColor(obs["full_image"], cv2.COLOR_RGB2BGR)
+                        
                         cv2.imshow("img_view", bgr_img)
                         cv2.waitKey(10)
 
                     image_obs = (
                         obs["image"]
-                        .reshape(3, FLAGS.im_size, FLAGS.im_size)
-                        .transpose(1, 2, 0)
+                        .reshape(3, 3, FLAGS.im_size, FLAGS.im_size)
+                        .transpose(0, 2, 3, 1)
                         * 255
                     ).astype(np.uint8)
-                    obs = {"image": image_obs, "proprio": obs["state"]}
+                    
+                    if FLAGS.show_image:
+                        fix_img = cv2.cvtColor(image_obs[0], cv2.COLOR_RGB2BGR)
+                        right_img = cv2.cvtColor(image_obs[1], cv2.COLOR_RGB2BGR)
+                        left_img = cv2.cvtColor(image_obs[2], cv2.COLOR_RGB2BGR)
+                        cv2.imshow("fix_view", fix_img)
+                        cv2.imshow("right_view", right_img)
+                        cv2.imshow("left_view", left_img)
+                        cv2.waitKey(10)
+                        
+                    obs = {"image": image_obs[0], "proprio": obs["state"]}
+                    
                     if obs_horizon is not None:
                         if len(obs_hist) == 0:
                             obs_hist.extend([obs] * obs_horizon)
