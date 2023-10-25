@@ -61,8 +61,8 @@ from PIL import Image
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("input_path", None, "Input path", required=True)
-flags.DEFINE_string("output_path", None, "Output path", required=True)
+flags.DEFINE_string("input_path", "/data/demos_8_17/raw", "Input path")
+flags.DEFINE_string("output_path", "/data/demos_8_17/numpy", "Output path")
 flags.DEFINE_integer(
     "depth",
     5,
@@ -73,7 +73,7 @@ flags.DEFINE_bool("overwrite", False, "Overwrite existing files")
 flags.DEFINE_float(
     "train_proportion", 0.9, "Proportion of data to use for training (rather than val)"
 )
-flags.DEFINE_integer("num_workers", 8, "Number of threads to use")
+flags.DEFINE_integer("num_workers", 16, "Number of threads to use")
 flags.DEFINE_integer("im_size", 128, "Image size")
 
 
@@ -99,7 +99,12 @@ def process_images(path):  # processes images at a trajectory level
     images_out = defaultdict(list)
 
     tlen = len(glob.glob(image_path[0] + "/im_*.jpg"))
-
+    # try:
+    #     tlen = len(glob.glob(image_path[0] + "/im_*.jpg"))
+    # except:
+    #     with open("tmp.txt", "w") as f:
+    #         f.write(f"{path}")
+            
     for i, name in enumerate(names):
         for t in range(tlen):
             images_out[name].append(squash(image_path[i] + "/im_{}.jpg".format(t)))
@@ -243,14 +248,26 @@ def make_numpy(path, train_proportion):
         FLAGS.output_path, *dirname.split(os.sep)[-(max(FLAGS.depth - 1, 1)) :]
     )
 
+    train_npy = os.path.join(outpath, "train/out.npy")
+    val_npy = os.path.join(outpath, "val/out.npy")
+    
     if os.path.exists(outpath):
         if FLAGS.overwrite:
             logging.info(f"Deleting {outpath}")
             tf.io.gfile.rmtree(outpath)
         else:
-            logging.info(f"Skipping {outpath}")
-            return
-
+            try:
+                with tf.io.gfile.GFile(train_npy, "rb") as f, tf.io.gfile.GFile(val_npy, "rb") as f2:
+                    x = np.load(f, allow_pickle=True)
+                    y = np.load(f2, allow_pickle=True)
+                    _ = [o["images0"] for traj in x for o in traj["observations"]] 
+                    _ = [o["images0"] for traj in x for o in traj["next_observations"]] 
+                    _ = [o["images0"] for traj in y for o in traj["observations"]] 
+                    _ = [o["images0"] for traj in y for o in traj["next_observations"]] 
+                logging.info(f"Skipping {outpath}")
+                return
+            except:
+                logging.info(f"====================== {outpath} =====================")
     outpath_train = tf.io.gfile.join(outpath, "train")
     outpath_val = tf.io.gfile.join(outpath, "val")
     tf.io.gfile.makedirs(outpath_train)

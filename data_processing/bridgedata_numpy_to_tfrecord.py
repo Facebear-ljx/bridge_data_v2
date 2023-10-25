@@ -30,25 +30,27 @@ Can read/write directly from/to Google Cloud Storage.
 Written by Kevin Black (kvablack@berkeley.edu).
 """
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 from multiprocessing import Pool
 
 import numpy as np
 import tensorflow as tf
+print(tf.config.list_physical_devices('GPU'))
 import tqdm
 from absl import app, flags, logging
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("input_path", None, "Input path", required=True)
-flags.DEFINE_string("output_path", None, "Output path", required=True)
+flags.DEFINE_string("input_path", "/data/demos_8_17/numpy", "Input path")
+flags.DEFINE_string("output_path", "/data/demos_8_17/tf", "Output path")
 flags.DEFINE_integer(
     "depth",
     5,
     "Number of directories deep to traverse. Looks for {input_path}/dir_1/dir_2/.../dir_{depth-1}/train/out.npy",
 )
-flags.DEFINE_bool("overwrite", False, "Overwrite existing files")
-flags.DEFINE_integer("num_workers", 8, "Number of threads to use")
-
+flags.DEFINE_bool("overwrite", True, "Overwrite existing files")
+flags.DEFINE_integer("num_workers", 1, "Number of threads to use")
+flags.DEFINE_integer("im_size", 128, "Image size")
 
 def tensor_feature(value):
     return tf.train.Feature(
@@ -57,6 +59,9 @@ def tensor_feature(value):
 
 
 def process(path):
+    # If no data, no dir anymore
+    if not os.path.exists(path): return
+    
     with tf.io.gfile.GFile(path, "rb") as f:
         arr = np.load(f, allow_pickle=True)
     dirname = os.path.dirname(os.path.abspath(path))
@@ -90,6 +95,20 @@ def process(path):
                                 dtype=np.uint8,
                             )
                         ),
+                        "observations/images1": tensor_feature(
+                            np.array(
+                                [o["images1"] if "images1" in o.keys() else np.zeros((FLAGS.im_size,FLAGS.im_size,3))
+                                for o in traj["observations"]],
+                                dtype=np.uint8,
+                            )
+                        ),
+                        "observations/images2": tensor_feature(
+                            np.array(
+                                [o["images2"] if "images2" in o.keys() else np.zeros((FLAGS.im_size,FLAGS.im_size,3))
+                                for o in traj["observations"]],
+                                dtype=np.uint8,
+                            )
+                        ),
                         "observations/state": tensor_feature(
                             np.array(
                                 [o["state"] for o in traj["observations"]],
@@ -99,6 +118,20 @@ def process(path):
                         "next_observations/images0": tensor_feature(
                             np.array(
                                 [o["images0"] for o in traj["next_observations"]],
+                                dtype=np.uint8,
+                            )
+                        ),
+                        "next_observations/images1": tensor_feature(
+                            np.array(
+                                [o["images1"] if "images1" in o.keys() else np.zeros((FLAGS.im_size,FLAGS.im_size,3))
+                                for o in traj["next_observations"]],
+                                dtype=np.uint8,
+                            )
+                        ),
+                        "next_observations/images2": tensor_feature(
+                            np.array(
+                                [o["images2"] if "images2" in o.keys() else np.zeros((FLAGS.im_size,FLAGS.im_size,3))
+                                for o in traj["next_observations"]],
                                 dtype=np.uint8,
                             )
                         ),
@@ -129,8 +162,10 @@ def main(_):
         tf.io.gfile.join(FLAGS.input_path, *("*" * (FLAGS.depth - 1)))
     )
     paths = [f"{p}/train/out.npy" for p in paths] + [f"{p}/val/out.npy" for p in paths]
-    with Pool(FLAGS.num_workers) as p:
-        list(tqdm.tqdm(p.imap(process, paths), total=len(paths)))
+    # with Pool(FLAGS.num_workers) as p:
+    #     list(tqdm.tqdm(p.imap(process, paths), total=len(paths)))
+    for path in tqdm.tqdm(paths):
+        process(path=path)
 
 
 if __name__ == "__main__":
