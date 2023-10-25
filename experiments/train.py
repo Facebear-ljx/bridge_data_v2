@@ -93,6 +93,8 @@ def main(_):
         FLAGS.config.seed,
         batch_size=FLAGS.config.batch_size,
         train=True,
+        cache=True,
+        cache_file_name="/home/dodo/bridge_data_v2/cache/train",
         action_proprio_metadata=FLAGS.bridgedata_config.action_proprio_metadata,
         sample_weights=FLAGS.bridgedata_config.sample_weights,
         **FLAGS.config.dataset_kwargs,
@@ -103,6 +105,8 @@ def main(_):
         batch_size=FLAGS.config.batch_size,
         action_proprio_metadata=FLAGS.bridgedata_config.action_proprio_metadata,
         train=False,
+        cache=True,
+        cache_file_name="/home/dodo/bridge_data_v2/cache/test",
         **FLAGS.config.dataset_kwargs,
     )
 
